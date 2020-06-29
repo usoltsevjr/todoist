@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (extras.classList.contains("collapsed")) {
+            expandcollapse.classList.add("expander")
+        } else if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    sort_column(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+
+        if (key_a == key_b) return 0;
+
+        if (reversed) {
+            return (key_a < key_b ? 1 : -1);
+        } else {
+            return (key_a > key_b ? 1 : -1);
+        }
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>log.html</h1>
+    <p>Report generated on 29-Jun-2020 at 14:26:40 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v2.1.1</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Packages</td>
+        <td>{"pluggy": "0.13.1", "py": "1.9.0", "pytest": "5.4.3"}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Windows-10-10.0.18362-SP0</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{"html": "2.1.1", "metadata": "1.10.0"}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.8.2</td></tr></table>
+    <h2>Summary</h2>
+    <p>4 tests ran in 7.98 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">4 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">0 failed</span>, <input checked="true" class="filter" data-test-result="error" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">1 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="error results-table-row">
+        <tr>
+          <td class="col-result">Error</td>
+          <td class="col-name">tests/project.py::test_comment::setup</td>
+          <td class="col-duration">1.52</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">task1 = Item({&#x27;added_by_uid&#x27;: 28457728,<br/> &#x27;assigned_by_uid&#x27;: None,<br/> &#x27;checked&#x27;: 0,<br/> &#x27;child_order&#x27;: 1,<br/> &#x27;collapsed&#x27;: 0,<br/> &#x27;content...: 1,<br/> &#x27;project_id&#x27;: 2239113656,<br/> &#x27;responsible_uid&#x27;: None,<br/> &#x27;section_id&#x27;: None,<br/> &#x27;sync_id&#x27;: None,<br/> &#x27;user_id&#x27;: 28457728})<br/><br/>    @pytest.fixture()<br/>    def comment(task1):<br/>        api = todoist.TodoistAPI(&#x27;313f6bf203b35e7ac56e39561a80633e459c9c54&#x27;)<br/>        comment = api.notes.add(task1[&#x27;id&#x27;], &#x27;Comment&#x27;)<br/>&gt;       api.commit()<br/><br/>tests\project.py:65: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/><br/>self = TodoistAPI(&#x27;ttrvuf0@lywenw.com&#x27;), raise_on_error = True<br/><br/>    def commit(self, raise_on_error=True):<br/>        &quot;&quot;&quot;<br/>        Commits all requests that are queued.  Note that, without calling this<br/>        method none of the changes that are made to the objects are actually<br/>        synchronized to the server, unless one of the aforementioned Sync API<br/>        calls are called directly.<br/>        &quot;&quot;&quot;<br/>        if len(self.queue) == 0:<br/>            return<br/>        ret = self.sync(commands=self.queue)<br/>        del self.queue[:]<br/>        if &#x27;sync_status&#x27; in ret:<br/>            if raise_on_error:<br/>                for k, v in ret[&#x27;sync_status&#x27;].items():<br/>                    if v != &#x27;ok&#x27;:<br/>&gt;                       raise SyncError(k, v)<br/><span class="error">E                       todoist.api.SyncError: (&#x27;66d93cd3-b9fb-11ea-898a-2089846a8c93&#x27;, {&#x27;error_tag&#x27;: &#x27;PREMIUM_ONLY&#x27;, &#x27;error_code&#x27;: 32, &#x27;error&#x27;: &#x27;Premium only feature&#x27;, &#x27;http_code&#x27;: 403, &#x27;error_extra&#x27;: {}})</span><br/><br/>..\..\appdata\local\programs\python\python38-32\lib\site-packages\todoist\api.py:363: SyncError<br/> -----------------------------Captured stdout setup------------------------------ <br/>Item({&#x27;added_by_uid&#x27;: 28457728,
+ &#x27;assigned_by_uid&#x27;: None,
+ &#x27;checked&#x27;: 0,
+ &#x27;child_order&#x27;: 1,
+ &#x27;collapsed&#x27;: 0,
+ &#x27;content&#x27;: &#x27;New Task&#x27;,
+ &#x27;date_added&#x27;: &#x27;2020-06-29T11:26:40Z&#x27;,
+ &#x27;date_completed&#x27;: None,
+ &#x27;day_order&#x27;: -1,
+ &#x27;due&#x27;: None,
+ &#x27;id&#x27;: 4002281164,
+ &#x27;in_history&#x27;: 0,
+ &#x27;is_deleted&#x27;: 0,
+ &#x27;labels&#x27;: [],
+ &#x27;parent_id&#x27;: None,
+ &#x27;priority&#x27;: 1,
+ &#x27;project_id&#x27;: 2239113656,
+ &#x27;responsible_uid&#x27;: None,
+ &#x27;section_id&#x27;: None,
+ &#x27;sync_id&#x27;: None,
+ &#x27;user_id&#x27;: 28457728})
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/project.py::test_createproject</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/project.py::test_task</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -----------------------------Captured stdout setup------------------------------ <br/>Item({&#x27;added_by_uid&#x27;: 28457728,
+ &#x27;assigned_by_uid&#x27;: None,
+ &#x27;checked&#x27;: 0,
+ &#x27;child_order&#x27;: 1,
+ &#x27;collapsed&#x27;: 0,
+ &#x27;content&#x27;: &#x27;New Task&#x27;,
+ &#x27;date_added&#x27;: &#x27;2020-06-29T11:26:37Z&#x27;,
+ &#x27;date_completed&#x27;: None,
+ &#x27;day_order&#x27;: -1,
+ &#x27;due&#x27;: None,
+ &#x27;id&#x27;: 4002281006,
+ &#x27;in_history&#x27;: 0,
+ &#x27;is_deleted&#x27;: 0,
+ &#x27;labels&#x27;: [],
+ &#x27;parent_id&#x27;: None,
+ &#x27;priority&#x27;: 1,
+ &#x27;project_id&#x27;: 2239113648,
+ &#x27;responsible_uid&#x27;: None,
+ &#x27;section_id&#x27;: None,
+ &#x27;sync_id&#x27;: None,
+ &#x27;user_id&#x27;: 28457728})
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/project.py::test_taskdate</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -----------------------------Captured stdout setup------------------------------ <br/>Item({&#x27;added_by_uid&#x27;: 28457728,
+ &#x27;assigned_by_uid&#x27;: None,
+ &#x27;checked&#x27;: 0,
+ &#x27;child_order&#x27;: 1,
+ &#x27;collapsed&#x27;: 0,
+ &#x27;content&#x27;: &#x27;NewTask_withdate&#x27;,
+ &#x27;date_added&#x27;: &#x27;2020-06-29T11:26:38Z&#x27;,
+ &#x27;date_completed&#x27;: None,
+ &#x27;day_order&#x27;: -1,
+ &#x27;due&#x27;: {&#x27;date&#x27;: &#x27;2020-06-30T12:00:00&#x27;,
+         &#x27;is_recurring&#x27;: False,
+         &#x27;lang&#x27;: &#x27;en&#x27;,
+         &#x27;string&#x27;: &#x27;tomorrow at 12:00&#x27;,
+         &#x27;timezone&#x27;: None},
+ &#x27;id&#x27;: 4002281043,
+ &#x27;in_history&#x27;: 0,
+ &#x27;is_deleted&#x27;: 0,
+ &#x27;labels&#x27;: [],
+ &#x27;parent_id&#x27;: None,
+ &#x27;priority&#x27;: 1,
+ &#x27;project_id&#x27;: 2239113652,
+ &#x27;responsible_uid&#x27;: None,
+ &#x27;section_id&#x27;: None,
+ &#x27;sync_id&#x27;: None,
+ &#x27;user_id&#x27;: 28457728})
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/project.py::test_subtask</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -----------------------------Captured stdout setup------------------------------ <br/>Item({&#x27;added_by_uid&#x27;: 28457728,
+ &#x27;assigned_by_uid&#x27;: None,
+ &#x27;checked&#x27;: 0,
+ &#x27;child_order&#x27;: 1,
+ &#x27;collapsed&#x27;: 0,
+ &#x27;content&#x27;: &#x27;New Task&#x27;,
+ &#x27;date_added&#x27;: &#x27;2020-06-29T11:26:39Z&#x27;,
+ &#x27;date_completed&#x27;: None,
+ &#x27;day_order&#x27;: -1,
+ &#x27;due&#x27;: None,
+ &#x27;id&#x27;: 4002281103,
+ &#x27;in_history&#x27;: 0,
+ &#x27;is_deleted&#x27;: 0,
+ &#x27;labels&#x27;: [],
+ &#x27;parent_id&#x27;: None,
+ &#x27;priority&#x27;: 1,
+ &#x27;project_id&#x27;: 2239113654,
+ &#x27;responsible_uid&#x27;: None,
+ &#x27;section_id&#x27;: None,
+ &#x27;sync_id&#x27;: None,
+ &#x27;user_id&#x27;: 28457728})
+Item({&#x27;added_by_uid&#x27;: 28457728,
+ &#x27;assigned_by_uid&#x27;: None,
+ &#x27;checked&#x27;: 0,
+ &#x27;child_order&#x27;: 2,
+ &#x27;collapsed&#x27;: 0,
+ &#x27;content&#x27;: &#x27;Subtask&#x27;,
+ &#x27;date_added&#x27;: &#x27;2020-06-29T11:26:39Z&#x27;,
+ &#x27;date_completed&#x27;: None,
+ &#x27;day_order&#x27;: -1,
+ &#x27;due&#x27;: None,
+ &#x27;id&#x27;: 4002281120,
+ &#x27;in_history&#x27;: 0,
+ &#x27;is_deleted&#x27;: 0,
+ &#x27;labels&#x27;: [],
+ &#x27;parent_id&#x27;: 4002281103,
+ &#x27;priority&#x27;: 1,
+ &#x27;project_id&#x27;: 2239113654,
+ &#x27;responsible_uid&#x27;: None,
+ &#x27;section_id&#x27;: None,
+ &#x27;sync_id&#x27;: None,
+ &#x27;user_id&#x27;: 28457728})
+<br/></div></td></tr></tbody></table></body></html>
